@@ -1,0 +1,100 @@
+#include <SoftwareSerial.h>
+
+// Gunakan pin 10 (RX) dan 11 (TX) untuk HC-05 di Arduino Uno
+#define HCRx 10   // HC-05 TX ke pin 10 Arduino
+#define HCTx 11   // HC-05 RX ke pin 11 Arduino
+const int buttonpin = 8;
+bool robotOn = false;
+bool lastButtonState = HIGH;
+unsigned long lastDebaunceTime = 0;
+unsigned long debaunceDelay = 50;
+SoftwareSerial HC05(HCRx, HCTx);
+
+// Motor control pins (misal L298N)
+#define IN4 7
+#define IN3 2
+#define IN2 4
+#define IN1 3
+#define ENA 5   // PWM kiri
+#define ENB 6   // PWM kanan
+
+void motorControl(int in1, int in2, int in3, int in4, int speedL, int speedR) {
+  digitalWrite(IN1, in1);
+  digitalWrite(IN2, in2);
+  digitalWrite(IN3, in3);
+  digitalWrite(IN4, in4);
+  analogWrite(ENA, speedL);
+  analogWrite(ENB, speedR);
+}
+
+void stopMotor() {
+  motorControl(0, 0, 0, 0, 0, 0);
+}
+
+void setup() {
+  pinMode(13, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  Serial.begin(115200);   // Serial ke PC
+  HC05.begin(9600);       // Serial ke HC-05
+ 
+  stopMotor();
+}
+
+void loop() {
+  char c;
+  String voice = "";
+
+  digitalWrite(13,HIGH);
+  delay(500);
+  digitalWrite(13,LOW);
+  delay(500);
+
+  // Baca data dari HC-05
+  while (HC05.available()) {
+    delay(10);
+    c = HC05.read();
+    voice += c;
+  }
+
+  if (voice.length() > 0) {
+    voice.trim();            // buang spasi, \r, \n
+    Serial.println(voice);   // cek di Serial Monitor
+
+    if (voice == "forward" || voice == "forwards" || voice == "maju" || voice == "A") {
+      // Maju
+      motorControl(1, 0, 1, 0, 80, 80);
+      delay(1000);
+      
+    }
+    else if (voice == "backward" || voice == "backwards" || voice == "mundur" || voice == "C") {
+      // Mundur
+      motorControl(0, 1, 0, 1, 70, 70);
+      delay(1000);
+      
+    }
+    else if (voice == "right" || voice == "kanan" || voice == "B") {
+      // Belok kanan (spin di tempat)
+      motorControl(1, 0, 0, 1, 70, 0);
+      delay(500);
+      
+    }
+    else if (voice == "left" || voice == "kiri" || voice == "D") {
+      // Belok kiri (spin di tempat)
+      motorControl(0, 1, 1, 0, 0, 70);
+      delay(500);
+      
+    }
+    else {
+      // Perintah tidak dikenal, berhenti
+      stopMotor();
+    }
+
+    voice = "";
+  }
+}
