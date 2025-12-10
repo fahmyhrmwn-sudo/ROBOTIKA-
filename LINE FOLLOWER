@@ -1,0 +1,81 @@
+// Pin sensor
+#define IR_KIRI  12
+#define IR_KANAN 11
+
+// Motor kiri
+#define ENA 5
+#define IN1 3
+#define IN2 4
+
+// Motor kanan
+#define ENB 6
+#define IN3 2
+#define IN4 7
+
+void setup() {
+  pinMode(IR_KIRI, INPUT);
+  pinMode(IR_KANAN, INPUT);
+
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+
+  pinMode(ENB, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  analogWrite(ENA, 65);  // Kecepatan motor kiri
+  analogWrite(ENB, 65);  // Kecepatan motor kanan
+}
+
+void maju() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
+void belokKiri() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
+void belokKanan() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+}
+
+void stopMotor() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+}
+
+void loop() {
+  int kiri = digitalRead(IR_KIRI);
+  int kanan = digitalRead(IR_KANAN);
+
+  // 0 = hitam (garis), 1 = putih (lantai)
+
+  if (kiri == 0 && kanan == 0) {
+    // Kedua sensor di garis
+    maju();
+  }
+  else if (kiri == 0 && kanan == 1) {
+    // Sensor kiri di garis â†’ belok kiri
+    belokKiri();
+  }
+  else if (kiri == 1 && kanan == 0) {
+    // Sensor kanan di garis â†’ belok kanan
+    belokKanan();
+  }
+  else {
+    // Tidak mendeteksi garis
+    stopMotor();
+  }
+}
