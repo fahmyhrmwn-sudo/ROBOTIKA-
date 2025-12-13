@@ -1,154 +1,165 @@
-// Sensor ultrasonik
-#define trigPin1 A0   // kiri
-#define echoPin1 A1
-#define trigPin2 A2   // depan
-#define echoPin2 A3
-#define trigPin3 A4   // kanan
-#define echoPin3 A5
+// === Pin Ultrasonic ===
+// Sensor kiri
+#define TRIG_L A0
+#define ECHO_L A1
 
-// Motor kiri
-#define ENA 5
+// Sensor tengah
+#define TRIG_C A2
+#define ECHO_C A3
+
+// Sensor kanan
+#define TRIG_R A4
+#define ECHO_R A5
+
+
+// === Pin Motor Driver L298N ===
+#define ENA 5    // PWM
 #define IN1 3
 #define IN2 4
-
-// Motor kanan
-#define ENB 6
 #define IN3 2
 #define IN4 7
+#define ENB 6    // PWM
 
-long distance1, distance2, distance3;
+unsigned long prevMillis = 0;
+const unsigned long interval = 250; // jeda 250 ms
 
-void setup() {
-  Serial.begin(9600);
 
-  pinMode(trigPin1, OUTPUT);
-  pinMode(echoPin1, INPUT);
-  pinMode(trigPin2, OUTPUT);
-  pinMode(echoPin2, INPUT);
-  pinMode(trigPin3, OUTPUT);
-  pinMode(echoPin3, INPUT);
+// === Variabel Global ===
+int distL, distC, distR;
+int speedForward = 70;
+int speedTurn = 50;     // <<< speed belok (lebih pelan)
+int speedBack = 50;     // <<< optional, mundur
 
-  pinMode(ENA, OUTPUT);
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
 
-  pinMode(ENB, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
 
-  analogWrite(ENA, 87.5);
-  analogWrite(ENB, 87.5);
-}
+// === Fungsi baca satu ultrasonic ===
+long readUltrasonic(int trigPin, int echoPin) {
 
-// Fungsi baca sensor
-long bacaJarak(int trigPin, int echoPin) {
+  delayMicroseconds(5);
+
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
+  delayMicroseconds(3);
   digitalWrite(trigPin, LOW);
 
-  long durasi = pulseIn(echoPin, HIGH);
-  return (durasi / 2) / 29.1;
+  long duration = pulseIn(echoPin, HIGH, 40000);
+
+  if (duration == 0) return 300;
+  return duration * 0.034 / 2;
 }
 
-// Gerakan motor
-void maju() {
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
+
+// === Gerak Motor ===
+void moveForward() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+  analogWrite(ENA, speedForward);
+  analogWrite(ENB, speedForward);
 }
 
-void mundur() {
-  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
+void moveBackward() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  analogWrite(ENA, speedBack);
+  analogWrite(ENB, speedBack);
 }
 
-void belokKiri() {
-  digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);  // kiri mati
-  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW); // kanan maju
+void turnLeft() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+  analogWrite(ENA, 50);            // kiri berhenti
+  analogWrite(ENB, 70);    // kanan jalan
 }
 
-void belokKanan() {
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW); // kiri maju
-  digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);  // kanan mati
+void turnRight() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  analogWrite(ENA, 70);   // kiri jalan
+  analogWrite(ENB, 45);           // kanan berhenti
 }
 
-void stopMotor() {
-  digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
+void stopMove() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
 }
 
+
+// === Setup ===
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(TRIG_L, OUTPUT);
+  pinMode(ECHO_L, INPUT_PULLUP);
+
+  pinMode(TRIG_C, OUTPUT);
+  pinMode(ECHO_C, INPUT);
+
+  pinMode(TRIG_R, OUTPUT);
+  pinMode(ECHO_R, INPUT);
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  stopMove();
+  Serial.println("Robot 3 Ultrasonik Siap Jalan!");
+}
+
+
+// === LOOP UTAMA ===
 void loop() {
 
-  // Baca sensor
-  distance1 = bacaJarak(trigPin1, echoPin1); // kiri
-  distance2 = bacaJarak(trigPin2, echoPin2); // depan
-  distance3 = bacaJarak(trigPin3, echoPin3); // kanan
+  if (millis() - prevMillis >= interval) {
+    prevMillis = millis();
 
-  Serial.print(distance1); Serial.print("  ");
-  Serial.print(distance2); Serial.print("  ");
-  Serial.println(distance3);
+    distL = readUltrasonic(TRIG_L, ECHO_L);
+    distC = readUltrasonic(TRIG_C, ECHO_C);
+    distR = readUltrasonic(TRIG_R, ECHO_R);
 
-  // ------------------------------------
-  //     KASUS TERKURUNG (DEPAN + KIRI + KANAN SEMPIT)
-  // ------------------------------------
-  if (distance1 < 35 && distance2 < 35 && distance3 < 35) {
-    stopMotor();
-    delay(300);
+    Serial.print("L: "); Serial.print(distL);
+    Serial.print("  C: "); Serial.print(distC);
+    Serial.print("  R: "); Serial.println(distR);
 
-    // MUNDUR untuk membuka jalan
-    mundur();
-    delay(600);
-    stopMotor();
-    delay(300);
+    int batasC = 20;
+    int batasL = 5;
+    int batasR = 5;
 
-    // Cari jalan paling kosong
-    if (distance1 > distance3) {
-      belokKiri();
-      delay(450);
-    } else {
-      belokKanan();
-      delay(450);
+    // 1. Depan terhalang â†’ mundur + pilih arah
+    if (distC < batasC) {
+      moveBackward();
+
+      if (distL > distR) turnLeft();
+      else turnRight();
     }
-    return;
-  }
 
-  // ------------------------------------
-  //              LOGIKA STOP
-  // ------------------------------------
-  if (distance2 < 35) {
-    stopMotor();
-    delay(400);
-
-    // pilih arah kosong
-    if (distance1 > distance3) {
-      belokKiri();
-      delay(350);
-    } else {
-      belokKanan();
-      delay(350);
+    // 2. Kiri terhalang
+    else if (distL < batasL) {
+      turnRight();
     }
-    return;
-  }
 
-  // ------------------------------------
-  //     LOGIKA NORMAL WALL FOLLOWER
-  // ------------------------------------
+    // 3. Kanan terhalang
+    else if (distR < batasR) {
+      turnLeft();
+    }
 
-  // Tidak ada tembok
-  if (distance1 > 30 && distance3 > 30) {
-    maju();
+    // 4. Aman
+    else {
+      moveForward();
+    }
   }
-  // Terlalu dekat tembok kiri â†’ geser ke kanan
-  else if (distance1 < 35) {
-    belokKanan();
-  }
-  // Terlalu dekat tembok kanan â†’ geser ke kiri
-  else if (distance3 < 35) {
-    belokKiri();
-  }
-  // Ideal â†’ maju
-  else {
-    maju();
-  }
+  delay(30);
 }
