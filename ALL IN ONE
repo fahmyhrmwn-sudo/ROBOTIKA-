@@ -1,228 +1,253 @@
 #include <NewPing.h>
 #include <SoftwareSerial.h>
 
-// ================================
-// PIN CONFIGURATION
-// ================================
-
-// MOTOR DRIVER L298N
-#define IN1 3
-#define IN2 4
-#define IN3 2
-#define IN4 7
-#define ENA 5
-#define ENB 6
-
-// BLUETOOTH HC-05 
-#define HCRx 10   // RX Arduino <- TX HC-05
-#define HCTx 11   // TX Arduino -> RX HC-05
-SoftwareSerial HC05(HCRx, HCTx);
-
-// LINE FOLLOWER IR
-#define irRight 9
-#define irLeft  8
-
-// MODE BUTTON
-#define MODE_BUTTON 12
-
-// ULTRASONIC SENSORS
-#define TRIGGER_PINF A0
-#define ECHO_PINF A1
-#define TRIGGER_PINL A2
-#define ECHO_PINL A3
-#define TRIGGER_PINR A4
-#define ECHO_PINR A5
+// --- Konfigurasi Ultrasonic ---
 #define MAX_DISTANCE 200
+#define TRIG_LEFT A0
+#define TRIG_RIGHT A2
+#define TRIG_FRONT A4
 
-NewPing sonarF(TRIGGER_PINF, ECHO_PINF, MAX_DISTANCE);
-NewPing sonarL(TRIGGER_PINL, ECHO_PINL, MAX_DISTANCE);
-NewPing sonarR(TRIGGER_PINR, ECHO_PINR, MAX_DISTANCE);
+// Definisi Pin Echo
+#define ECHO_FRONT A1 
+#define ECHO_LEFT A3 
+#define ECHO_RIGHT  A5
 
-// ============== MODE ===============
-int modeRobot = 1;
-/*
-1 = Obstacle Avoidance
-2 = Line Follower
-3 = Bluetooth Manual Control
-*/
+NewPing sonarFront(TRIG_FRONT, ECHO_FRONT, MAX_DISTANCE);
+NewPing sonarLeft(TRIG_LEFT, ECHO_LEFT, MAX_DISTANCE);
+NewPing sonarRight(TRIG_RIGHT, ECHO_RIGHT, MAX_DISTANCE);
 
-unsigned long lastPress = 0;
+int distFront, distLeft, distRight;
 
+// --- Konfigurasi IR (Line Follower) 
+#define irRight 9
+#define irLeft 8
 
-// ========================================
-// SETUP
-// ========================================
+// --- Konfigurasi Motor L298N ---
+#define in1L298N 3
+#define in2L298N 4
+#define in3L298N 2
+#define in4L298N 7
+// Pin PWM (Kecepatan)
+#define speed1L298N 5
+#define speed2L298N 6
+
+// --- LED & Button ---
+#define led1  19  // HANYA 1 LED
+#define button 12   // Tombol ganti mode
+
+// --- Bluetooth HC-05 ---
+#define unoRX 10
+#define unoTX 11
+SoftwareSerial HC05(unoRX, unoTX);
+
+// --- Variabel Global ---
+int rightStatus, leftStatus;
+byte buttonValue = 0;
+byte prevButtonValue = 0;
+byte mode = 0; // 0: Idle, 1: WF, 2: LF, 3: BT
+
+int speedNormal = 80; 
+// Jika ingin kecepatan berbeda saat belok, ubah ini:
+int speedTurn = 80;   
+String voice;
+
+// Variabel untuk Blinking LED
+unsigned long previousMillis = 0;
+boolean ledState = LOW;
+long blinkInterval = 0; 
+
 void setup() {
-
-  Serial.begin(115200);
+  Serial.begin(9600);
   HC05.begin(9600);
-
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
-  pinMode(ENA, OUTPUT);
-  pinMode(ENB, OUTPUT);
 
   pinMode(irRight, INPUT);
   pinMode(irLeft, INPUT);
+  pinMode(button, INPUT_PULLUP);
 
-  pinMode(MODE_BUTTON, INPUT_PULLUP);
+  pinMode(in1L298N, OUTPUT);
+  pinMode(in2L298N, OUTPUT);
+  pinMode(in3L298N, OUTPUT);
+  pinMode(in4L298N, OUTPUT);
+  pinMode(speed1L298N, OUTPUT);
+  pinMode(speed2L298N, OUTPUT);
 
-  Serial.println("TRIATLON ROBOT READY");
-  printMode();
+  pinMode(led1, OUTPUT);
+
+  // Set kecepatan awal default
+  analogWrite(speed1L298N, speedNormal);
+  analogWrite(speed2L298N, speedNormal);
 }
 
-
-// ========================================
-// LOOP UTAMA
-// ========================================
 void loop() {
-
-  checkButton();
-  //checkBluetoothCommand();
-
-  if (modeRobot == 1) obstacleAvoidance();
-  else if (modeRobot == 2) lineFollower();
-  else if (modeRobot == 3) bluetoothDrive();
-  else motorControl(0,0,0,0,0,0);
-}
-
-
-// ===============================================
-// MODE CHANGE USING BUTTON
-// ===============================================
-void checkButton() {
-  if (digitalRead(MODE_BUTTON) == LOW && millis() - lastPress > 400) {
-
-    modeRobot++;
-    if (modeRobot > 3) modeRobot = 1;
-
-    printMode();
-    lastPress = millis();
+  // Cek Tombol Mode
+  buttonValue = digitalRead(button);
+  if ((buttonValue == LOW) && (prevButtonValue == 0)) {
+    mode++;
+    prevButtonValue = 1;
+    motorControl(LOW, LOW, LOW, LOW); 
+    delay(200); 
+  } else if (buttonValue == HIGH) {
+    prevButtonValue = 0;
   }
-}
-
-void printMode() {
-  if (modeRobot == 1) Serial.println("MODE: OBSTACLE AVOIDANCE");
-  if (modeRobot == 2) Serial.println("MODE: LINE FOLLOWER");
-  if (modeRobot == 3) Serial.println("MODE: BLUETOOTH DRIVE");
-}
-
-
-// ======================================================
-// MODE 1: OBSTACLE AVOIDANCE
-// ======================================================
-void obstacleAvoidance() {
-
-  int F = sonarF.ping_cm();
-  int L = sonarL.ping_cm();
-  int R = sonarR.ping_cm();
-
-  if (F > 20 || F == 0) {
-    motorControl(1,0,1,0,70,70);
-
-  } else {
-
-    motorControl(0,1,0,1,70,70);
-    delay(300);
-
-    motorControl(0,0,0,0,0,0);
-    delay(300);
-
-    L = sonarL.ping_cm();
-    R = sonarR.ping_cm();
-
-    if (L > R)
-      motorControl(0,1,1,0,70,70);
-    else
-      motorControl(1,0,0,1,70,70);
-
-    delay(350);
-    motorControl(0,0,0,0,0,0);
-  }
-}
-
-
-// ======================================================
-// MODE 2: LINE FOLLOWER
-// ======================================================
-void lineFollower() {
-
-  int L = digitalRead(irLeft);
-  int R = digitalRead(irRight);
-
-  if (L == 0 && R == 0)
-    motorControl(1,0,1,0,70,70);
-
-  else if (L == 1 && R == 0)
-    motorControl(0,1,1,0,70,70);
-
-  else if (L == 0 && R == 1)
-    motorControl(1,0,0,1,70,70);
-
-  else
-    motorControl(0,0,0,0,0,0);
-}
-
-
-// ======================================================
-// MODE 3: BLUETOOTH DRIVE 
-// ======================================================
-
-String bluetoothData = "";
-
-void bluetoothDrive() {
-  char c;
-
-  while (HC05.available()) {
-
-    delay(10);
-    c = HC05.read();
-    bluetoothData += c;
-  }
-
-  if (bluetoothData.length() > 0) {
-
-    Serial.print("CMD: ");
-    Serial.println(bluetoothData);
-
-  if (bluetoothData == "forward" || bluetoothData == "forwards" || bluetoothData == "maju" || bluetoothData == "A") {
-      motorControl(1,0,1,0,70,70);
-  }
-
-  else if (bluetoothData == "backward" || bluetoothData == "backwards" || bluetoothData == "mundur" || bluetoothData == "C") {
-      motorControl(0,1,0,1,70,70);
-  }
-
-  else if (bluetoothData == "right" || bluetoothData == "kanan" || bluetoothData == "B") {
-      motorControl(1,0,0,0,70,70);
-  }
-
-  else if (bluetoothData == "left" || bluetoothData == "kiri" || bluetoothData == "D") {
-      motorControl(0,0,1,0,70,70);
-  }
-
-  else {
-      motorControl(0,0,0,0,0,0);
-  }
-   bluetoothData = "";
-}
-
   
+  if (mode > 3) { 
+    mode = 0;
+  }
+
+  // Atur Indikator 1 LED 
+  handleSingleLed(mode);
+
+  // Eksekusi Mode 
+  switch (mode) {
+    case 0: // Idle
+      motorControl(LOW, LOW, LOW, LOW);
+       Serial.println("Mode ON");
+      break;
+
+    case 1: 
+      WFMode();
+      Serial.println("Mode Wall Follower");
+      break;
+
+    case 2: 
+      LFMode();
+       Serial.println("Mode Line Follower");
+      break;
+
+    case 3: 
+      BTMode();
+       Serial.println("Mode Bluetooth");
+      break;
+  }
+}
+
+// Fungsi Indikator 1 LED 
+void handleSingleLed(int currentMode) {
+  unsigned long currentMillis = millis();
+
+  if (currentMode == 0) {
+    digitalWrite(led1, LOW);
+    ledState = LOW; 
+  }
+  else if (currentMode == 3) { // BT
+    digitalWrite(led1, HIGH);
+    ledState = HIGH;
+  }
+  else {
+    if (currentMode == 1) blinkInterval = 800; // WF lambat
+    else if (currentMode == 2) blinkInterval = 150; // LF cepat
+
+    if (currentMillis - previousMillis >= blinkInterval) {
+      previousMillis = currentMillis;
+      ledState = !ledState;
+      digitalWrite(led1, ledState);
+    }
+  }
 }
 
 
-// ======================================================
-// UNIVERSAL MOTOR CONTROL
-// ======================================================
-void motorControl(int in1, int in2, int in3, int in4, int SpeedL, int SpeedR) {
+void motorControl (int in1Value, int in2Value, int in3Value, int in4Value) {
+  digitalWrite(in1L298N, in1Value);
+  digitalWrite(in2L298N, in2Value);
+  digitalWrite(in3L298N, in3Value);
+  digitalWrite(in4L298N, in4Value);
+  analogWrite(speed1L298N, speedNormal); 
+  analogWrite(speed2L298N, speedNormal);
+}
 
-  digitalWrite(IN1, in1);
-  digitalWrite(IN2, in2);
-  digitalWrite(IN3, in3);
-  digitalWrite(IN4, in4);
+// --- WF Mode 
+void WFMode() {
+  distFront = sonarFront.ping_cm(); delay(10);
+  distLeft  = sonarLeft.ping_cm();  delay(10);
+  distRight = sonarRight.ping_cm(); delay(10);
+  
+  if (distFront == 0) distFront = 200;
+  if (distLeft == 0) distLeft = 200;
+  if (distRight == 0) distRight = 200;
 
-  analogWrite(ENA, SpeedL);
-  analogWrite(ENB, SpeedR);
+  if (distFront < 5) {
+    motorControl(LOW, HIGH, LOW, HIGH); // mundur
+    delay(200);
+  } 
+  else if (distFront < 10 && distLeft > 10  && distRight > 15) {
+    motorControl(HIGH, LOW, LOW,HIGH); //kanan
+    delay(90);
+  } 
+   else if (distFront < 10 && distLeft > 10 ) {
+    motorControl(LOW, HIGH, HIGH, LOW); //kiri
+    delay(100);
+  } 
+  
+  else if (distLeft < 6) { 
+    motorControl(HIGH, LOW, LOW, LOW); // Menjauh
+  }
+  else if (distLeft > 16) { 
+    motorControl(LOW, LOW, HIGH, LOW); // Mendekat
+  }
+  else {
+    motorControl(HIGH, LOW, HIGH, LOW); // Lurus
+  }
+}
+
+// --- LF Mode 
+void LFMode() {
+  rightStatus = digitalRead(irRight);
+  leftStatus = digitalRead(irLeft);
+
+  if (leftStatus == 0 && rightStatus == 0) {
+    motorControl(HIGH, LOW, HIGH, LOW);
+  } else if (leftStatus == 0 && rightStatus == 1) {
+    motorControl(LOW, HIGH, HIGH, LOW);
+  } else if (leftStatus == 1 && rightStatus == 0) {
+    motorControl(HIGH, LOW, LOW, HIGH);
+  } else if (leftStatus == 1 && rightStatus == 1) {
+    motorControl(LOW, LOW, LOW, LOW);
+  }
+}
+
+// --- BT Mode ---
+void BTMode() {
+  // Metode 1: String Voice (Aplikasi Voice Control)
+ char c;
+  while (HC05.available()) {
+    delay(10);
+   c = HC05.read();
+    voice += c;
+  }
+
+  if (voice.length() > 0) {
+    Serial.println(voice); 
+    // logic mode bt
+    if (voice == "forward"|| voice == "A"){ 
+    motorControl(HIGH, LOW, HIGH, LOW);
+    delay(1000);
+    Serial.println("maju");
+    }
+    else if (voice == "backwards"|| voice == "C") {
+    motorControl(LOW, HIGH, LOW, HIGH);
+    delay(1000);
+    Serial.println("mundur");
+    }
+    else if (voice == "right"|| voice =="D") {
+    motorControl(LOW, HIGH, HIGH, LOW);
+    delay(1000);
+    Serial.println("kanan");
+    }
+    else if (voice == "left" || voice =="B") {
+    motorControl(HIGH, LOW, LOW, HIGH);
+    delay(1000);
+    Serial.println("kiri");
+   }
+    else if (voice == "stop" || voice == "3"){
+    motorControl(LOW, LOW, LOW, LOW);
+    delay(1000);
+    Serial.println("stop");
+    
+
+   }
+      
+    
+    voice = ""; 
+  }
+  
 }
