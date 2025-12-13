@@ -1,6 +1,6 @@
 // Pin sensor
-#define IR_KIRI  12
-#define IR_KANAN 11
+#define IR_KIRI  8
+#define IR_KANAN 9
 
 // Motor kiri
 #define ENA 5
@@ -12,7 +12,14 @@
 #define IN3 2
 #define IN4 7
 
+// Kecepatan
+int speedMaju = 60;       // kecepatan lurus
+int speedBelok = 60;      // belok lebih lambat agar stabil
+int speedHalus = 60;      // koreksi halus
+
 void setup() {
+   Serial.begin(9600);
+
   pinMode(IR_KIRI, INPUT);
   pinMode(IR_KANAN, INPUT);
 
@@ -24,29 +31,43 @@ void setup() {
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
 
-  analogWrite(ENA, 65);  // Kecepatan motor kiri
-  analogWrite(ENB, 65);  // Kecepatan motor kanan
+  analogWrite(ENA, speedMaju);
+  analogWrite(ENB, speedMaju);
 }
 
+// --- Fungsi motor ---
 void maju() {
+  analogWrite(ENA, speedMaju);
+  analogWrite(ENB, speedMaju);
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
+
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
 }
 
 void belokKiri() {
+  // kiri pelan, kanan normal
+  analogWrite(ENA, speedHalus);
+  analogWrite(ENB, speedBelok);
+  
   digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
+  digitalWrite(IN2, HIGH);
+
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
 }
 
 void belokKanan() {
+  // kanan pelan, kiri normal
+  analogWrite(ENA, speedBelok);
+  analogWrite(ENB, speedHalus);
+  
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
+
   digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
+  digitalWrite(IN4, HIGH);
 }
 
 void stopMotor() {
@@ -60,22 +81,23 @@ void loop() {
   int kiri = digitalRead(IR_KIRI);
   int kanan = digitalRead(IR_KANAN);
 
-  // 0 = hitam (garis), 1 = putih (lantai)
-
+  // 0 = garis hitam, 1 = putih
   if (kiri == 0 && kanan == 0) {
-    // Kedua sensor di garis
+    // Lurus
     maju();
   }
-  else if (kiri == 0 && kanan == 1) {
-    // Sensor kiri di garis â†’ belok kiri
-    belokKiri();
-  }
   else if (kiri == 1 && kanan == 0) {
-    // Sensor kanan di garis â†’ belok kanan
+    // Kiri keluar garis â†’ koreksi kanan
     belokKanan();
   }
+  else if (kiri == 0 && kanan == 1) {
+    // Kanan keluar garis â†’ koreksi kiri
+    belokKiri();
+  }
   else {
-    // Tidak mendeteksi garis
+    // Kedua sensor hilang â†’ berhenti (atau bisa ditambah mode recovery)
     stopMotor();
   }
+
+  delay(60); // delay kecil untuk respon cepat
 }
