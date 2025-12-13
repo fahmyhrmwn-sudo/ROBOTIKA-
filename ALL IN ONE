@@ -4,12 +4,12 @@
 // --- Konfigurasi Ultrasonic ---
 #define MAX_DISTANCE 200
 #define TRIG_LEFT A0
-#define TRIG_RIGHT A2
-#define TRIG_FRONT A4
+#define TRIG_RIGHT A4
+#define TRIG_FRONT A2
 
 // Definisi Pin Echo
-#define ECHO_FRONT A1 
-#define ECHO_LEFT A3 
+#define ECHO_FRONT A3
+#define ECHO_LEFT A1 
 #define ECHO_RIGHT  A5
 
 NewPing sonarFront(TRIG_FRONT, ECHO_FRONT, MAX_DISTANCE);
@@ -101,17 +101,17 @@ void loop() {
   switch (mode) {
     case 0: // Idle
       motorControl(LOW, LOW, LOW, LOW);
-       Serial.println("Mode ON");
+       Serial.println("Mode Nyantai");
       break;
 
     case 1: 
       WFMode();
-      Serial.println("Mode Wall Follower");
+      Serial.println("Mode Tembok");
       break;
 
     case 2: 
       LFMode();
-       Serial.println("Mode Line Follower");
+       Serial.println("Mode Garis");
       break;
 
     case 3: 
